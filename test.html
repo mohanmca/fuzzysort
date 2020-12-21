@@ -17,17 +17,23 @@
   <div class="container">
     <div id="async-buttons"></div><br>
     <div id="buttons"></div><br>
+    Show Hint   <input id="show_hint" autofocus style="width:30px" type="checkbox" /><br/>
     <input id="input" autofocus style="width:300px" placeholder="ue4_filenames" />
-    <div id="results"></div>
+    <div id="results"></div><br/><br/><br/><br/>
+    <div id="found_results" style="border: 2px solid; background-color: #FBD603;"></div>
   </div>
 </div>
 
 <script>
-  ;(function() {
+  ;(
+    
+  function() {
+    const $show_hint = $('#show_hint')
     const $input = $('#input')
     const $results = $('#results')
+    const $found_results = $('#found_results')
     const testdatakeys = Object.keys(testdata_prepared)
-    var testdatakey = 'ue4_filenames'
+    var testdatakey = 'apache_cassandra'
     var searchMode = 'Ludicrous Mode'
     var cache = {}
     const cacheChars = 'abcdefghijklmnopqrstuvwxyz'
@@ -43,27 +49,10 @@
 
       if(cachePromise) { cachePromise.cancel() }; cacheCanceled = true
 
-      if(searchMode==='Ludicrous Mode') {
-        startms = Date.now()
-        if(cache[testdatakey]&&cache[testdatakey][inputValue]) {
-          renderCache(cache[testdatakey][inputValue])
-          cacheNextLevel()
-        } else {
-          renderResults(fuzzysort.go(inputValue, testdata_prepared[testdatakey]))
-          cacheNextLevel()
-        }
-
-      } else if(searchMode === 'Async') {
-        if(promise) promise.cancel()
 
         startms = Date.now()
-        promise = fuzzysort.goAsync(inputValue, testdata_prepared[testdatakey])
-        promise.then(renderResults, err=>console.log(err))
-
-      } else { // Sync
-        startms = Date.now()
-        renderResults(fuzzysort.go(inputValue, testdata_prepared[testdatakey]))
-      }
+        renderResults(fuzzysort.go(inputValue, testdata_prepared[testdatakey]), testdata_prepared[testdatakey])
+      
     }
 
     function cacheNextLevel(nextIndex=0) {
@@ -98,20 +87,39 @@
       var html = '<ul>'
       for (var i = 0; i < results.length; i++) {
         const result = results[i]
-        html += `<li>${result.score} - ${fuzzysort.highlight(result)}</li>`
+        if( $("#show_hint").prop( "checked")) {
+          html += `<li>${result.score} - ${fuzzysort.highlight(result)}</li>`
+        } else {
+          html += `<li>${result.score} - xxxxxxxxxxx}</li>`
+        }
       }
       html += '</ul>'
       return html
     }
-    function renderResults(results) {
+    function renderResults(results, records) {
+      let size = records ? records.length : 0;
       const duration = Date.now() - startms
-      const header = `<p>${results.total} matches in ${duration}ms</p>`
-      const html = resultsToHtml(results)
+      let already_found = $('#found_results').children().length;
 
-      if(cache[testdatakey]===undefined) cache[testdatakey] = {}
-      cache[testdatakey][getSearchLower()] = {total:results.total, html}
+      if(results.total>=1 && results[0].score==0) {
+        debugger;//row_cache_size_in_mb
+        let target = results[0].target;
+        $results.html(`You found ${already_found+1}th element target`)
+        //records = records.fiter(value => value!== target)
+        records.filter( t => t.target !== 'test')
+        $found_results.append( `<p>${target}</p>` );
 
-      $results.html(header+html)
+        
+      } else {
+          const header = `<p>${results.total} matches in ${duration}ms / out of ${size - already_found+1}</p>`
+        const html = resultsToHtml(results)
+
+        if(cache[testdatakey]===undefined) cache[testdatakey] = {}
+        cache[testdatakey][getSearchLower()] = {total:results.total, html}
+        console.log("Resul found out of " + size)
+        $results.html(header+html)
+
+      }
     }
     function renderCache(cached) {
       const duration = Date.now() - startms
@@ -129,6 +137,7 @@
       document.onkeydown = (e) => {
         $input.focus()
       }
+
 
     $('#async-buttons').html(`
       <div class="btn-group" data-toggle="buttons">
